@@ -31,5 +31,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     collectHistories: () => ipcRenderer.invoke('collect-all-histories'),
     generateText: (histories: unknown) => ipcRenderer.invoke('generate-summary-text', histories),
     generateWithApi: (params: unknown) => ipcRenderer.invoke('generate-summary-with-api', params),
+    loadPrompts: () => ipcRenderer.invoke('prompts:load'),
+    savePrompts: (prompts: any[]) => ipcRenderer.invoke('prompts:save', prompts),
+    proxyFetch: (data: { url: string, method: string, headers: any, body: any }) => ipcRenderer.invoke('api:proxy-fetch', data),
+    startProxyStream: (data: any) => ipcRenderer.send('api:proxy-stream', data),
+    onProxyChunk: (callback: (chunk: string) => void) => {
+      const listener = (_: any, chunk: string) => callback(chunk)
+      ipcRenderer.on('api:proxy-chunk', listener)
+      return () => ipcRenderer.removeListener('api:proxy-chunk', listener)
+    },
+    onProxyEnd: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('api:proxy-end', listener)
+      return () => ipcRenderer.removeListener('api:proxy-end', listener)
+    },
+    onProxyError: (callback: (err: string) => void) => {
+      const listener = (_: any, err: string) => callback(err)
+      ipcRenderer.on('api:proxy-error', listener)
+      return () => ipcRenderer.removeListener('api:proxy-error', listener)
+    },
   },
 })

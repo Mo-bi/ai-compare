@@ -55,27 +55,26 @@
 
 ### 4. 聊天历史读取（汇总综述核心）
 
-**方案：DOM 提取**
+**方案：地毯式搜索 + 最末端节点去重 (Leaf-Node Strategy)**
 
-- 通过 `webview.executeJavaScript()` 在各 AI 网页中执行 DOM 读取脚本
-- 提取对话中的问答对（用户消息 + AI 回复）
-- 返回结构化 JSON 数据
+- 通过 `webview.executeJavaScript()` 遍历网页中所有包含文本的元素。
+- **物理去重**：脚本自动检查节点包含关系。若节点 A 包含节点 B 且内容重合，则彻底丢弃 A（父节点），仅保留最深层的 B（叶子节点），解决 HTML 嵌套导致的重复抓取。
+- **侧边栏屏蔽**：基于坐标系统，自动过滤 WebView 左侧 15% 区域，彻底屏蔽历史对话列表的干扰。
 
-各网站历史读取选择器：
+### 5. 高级汇总综述系统
 
-- 豆包: `[class*="message"][class*="user"]`, `[class*="message"][class*="bot"]`
-- Kimi: `[class*="message"]`
-- 智谱清言: `[class*="message"], .chat-item`
-- 腾讯元宝: `[class*="message"]`
-- 通义千问: `[class*="message"], [class*="chat-item"]`
-- DeepSeek: `.ds-markdown` (AI回复), `.fbb737a4` (用户消息)
+#### A. 精准提问记录
+- 系统在 `handleSend` 阶段自动将用户输入的文字存入当前 Workspace 的 `userQueries` 状态。
+- 综述时直接调用该清单，实现 100% 准确的用户输入还原。
 
-### 5. 汇总综述功能
+#### B. 主进程流式 API 代理 (Streaming Proxy)
+- **跨域解决**：由于浏览器渲染进程存在 CORS 限制，所有综述 API 请求转由 Electron **主进程**发起。
+- **流式转发**：主进程使用 Node.js Stream 读取 API 响应，并通过 `webContents.send` 将 Data Chunk 实时推送给渲染进程。
+- **SSE 解析**：前端采用缓冲区 (Buffer) 机制解析 SSE 格式消息，确保在网络分包情况下依然能平滑输出。
 
-两种模式：
-
-1. **API 模式**：调用 OpenAI/其他 LLM API，将所有聊天历史合并为 prompt，生成综述
-2. **无 API 模式**：将聊天历史文本汇总展示，方便手动复制到其他 AI 中
+#### C. 磁盘持久化 (Disk Persistence)
+- **存储路径**：自定义 Prompt 模板存储于 `app.getPath('userData')/summary_prompts.json`。
+- **稳定性**：独立于浏览器缓存，支持跨版本升级和卸载重装后的数据自动恢复。
 
 ### 6. macOS 钥匙串集成
 

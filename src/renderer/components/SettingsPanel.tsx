@@ -8,13 +8,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-const SUMMARY_MODELS = [
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini (推荐，便宜快速)' },
-  { id: 'gpt-4o', name: 'GPT-4o (效果更好)' },
-  { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini' },
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-  { id: 'deepseek-chat', name: 'DeepSeek Chat (需要 DeepSeek API Key)' },
-]
+import { SUMMARY_MODELS } from '../store/appStore'
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({
   apiKey,
