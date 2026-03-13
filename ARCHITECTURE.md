@@ -15,7 +15,14 @@
 
 ## 核心问题解决方案
 
-### 1. 多窗口并排加载 AI 网页
+### 1. 多工作区支持（Workspace）
+
+- **数据模型**：每个工作区包含独立的 panels 数组，存储在 appStore 中
+- **持久化**：工作区数据保存到 localStorage，包含固定状态、排序、面板配置
+- **状态保持**：切换工作区时使用 `visibility: hidden` 隐藏而非卸载组件，webview 状态不丢失
+- **左侧导航**：WorkspaceSidebar 组件，支持展开/收起、重命名、排序、固定
+
+### 2. 多窗口并排加载 AI 网页
 
 - 使用 Electron `<webview>` 标签（非 iframe，不受 CSP/X-Frame-Options 限制）
 - 每个 webview 独立 session（通过 `partition` 属性），支持独立登录状态
