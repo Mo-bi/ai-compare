@@ -11,6 +11,9 @@ app.commandLine.appendSwitch('no-sandbox')
 app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
 app.commandLine.appendSwitch('disable-gpu-disk-cache')
 
+// 解决中文输入法问题
+app.commandLine.appendSwitch('disable-input-ime-autocommit')
+
 // 判断是否为开发模式：只有显式设置 NODE_ENV=development 时才使用开发服务器
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -138,6 +141,75 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('password:delete', async (_event, account: string) => {
     return await passwordManager.deletePassword(account)
+  })
+
+  // --- 【新增】Prompt 模板持久化存储 ---
+  const PROMPTS_FILE = path.join(app.getPath('userData'), 'summary_prompts.json')
+  
+  ipcMain.handle('prompts:load', async () => {
+    try {
+      if (fs.existsSync(PROMPTS_FILE)) {
+        const data = fs.readFileSync(PROMPTS_FILE, 'utf-8')
+        return JSON.parse(data)
+      }
+    } catch (e) {
+      console.error('[Main] Failed to load prompts:', e)
+    }
+    return []
+  })
+
+  ipcMain.handle('prompts:save', async (_event, prompts: any[]) => {
+    try {
+      fs.writeFileSync(PROMPTS_FILE, JSON.stringify(prompts, null, 2))
+      return true
+    } catch (e) {
+      console.error('[Main] Failed to save prompts:', e)
+      return false
+    }
+  })
+
+  // --- 【新增】流式 API 请求代理 ---
+  ipcMain.on('api:proxy-stream', async (event, { url, method, headers, body }) => {
+    const webContents = event.sender
+    try {
+      console.log('[Main] Starting proxy stream for:', url)
+      const response = await fetch(url, {
+        method,
+        headers: {
+          ...headers,
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify({ ...body, stream: true })
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        webContents.send('api:proxy-error', `API ${response.status}: ${errorText}`)
+        return
+      }
+
+      const reader = response.body!
+      if ('getReader' in reader) {
+        const streamReader = (reader as any).getReader()
+        while (true) {
+          const { done, value } = await streamReader.read()
+          if (done) break
+          const chunk = new TextDecoder().decode(value)
+          // 直接通过 webContents 发送，更适合单向持续推送
+          webContents.send('api:proxy-chunk', chunk)
+        }
+      } else {
+        (reader as any).on('data', (chunk: Buffer) => {
+          webContents.send('api:proxy-chunk', chunk.toString())
+        })
+        ;(reader as any).on('end', () => webContents.send('api:proxy-end'))
+      }
+      
+      webContents.send('api:proxy-end')
+    } catch (e: any) {
+      console.error('[Main] Stream proxy error:', e)
+      webContents.send('api:proxy-error', e.message)
+    }
   })
   
   // 初始化综述服务

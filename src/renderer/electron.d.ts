@@ -26,6 +26,24 @@ interface Window {
     getAppPath: () => Promise<string>
     openExternal: (url: string) => Promise<void>
     platform: string
+    invoke: (channel: string, ...args: unknown[]) => Promise<any>
+    password: {
+      get: (account: string) => Promise<string | null>
+      set: (account: string, password: string) => Promise<void>
+      delete: (account: string) => Promise<boolean>
+    }
+    summary: {
+      collectHistories: () => Promise<any>
+      generateText: (histories: any) => Promise<string>
+      generateWithApi: (params: any) => Promise<any>
+      loadPrompts: () => Promise<any[]>
+      savePrompts: (prompts: any[]) => Promise<boolean>
+      proxyFetch: (data: any) => Promise<any>
+      startProxyStream: (data: any) => void
+      onProxyChunk: (callback: (chunk: string) => void) => () => void
+      onProxyEnd: (callback: () => void) => () => void
+      onProxyError: (callback: (err: string) => void) => () => void
+    }
   }
 }
 

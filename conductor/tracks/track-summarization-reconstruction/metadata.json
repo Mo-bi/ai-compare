@@ -1,0 +1,8 @@
+{
+  "id": "track-summarization-reconstruction",
+  "name": "Multi-AI Dialogue Window Summary Reconstruction",
+  "status": "completed",
+  "startDate": "2026-03-13",
+  "lastUpdated": "2026-03-13",
+  "description": "Reconstructed the summary module to support reading progress tracking, window selection, prompt library management, and multiple API providers with streaming output."
+}

@@ -42,6 +42,12 @@ function App() {
       return
     }
 
+    const queryText = store.inputText.trim()
+    if (!queryText) return
+    
+    // 【记录提问】
+    store.addUserQuery(store.activeWorkspaceId, queryText)
+
     store.setIsSending(true)
     store.setInputText('')
 
@@ -50,7 +56,7 @@ function App() {
       if (webviewRef?.sendMessage) {
         try {
           store.updatePanelGenerating(panel.id, true)
-          await webviewRef.sendMessage(store.inputText)
+          await webviewRef.sendMessage(queryText)
         } catch (e) {
           console.error(`[App] Failed to send to ${panel.name}:`, e)
         }
@@ -61,90 +67,211 @@ function App() {
   }, [store])
 
   const handleSummarize = useCallback(async () => {
-    if (store.summaryLoading) return
+    if (store.summaryState.status === 'reading' || store.summaryState.status === 'generating') return
 
     store.setShowSummary(true)
-    store.setSummaryContent('正在收集聊天历史...')
-    store.setSummaryLoading(true)
+    store.setSummaryStatus('reading')
+    store.setGeneratedContent('')
 
-    try {
-      const histories: Array<{panelName: string, messages: Array<{role: string, content: string}>}> = []
-
-      for (const panel of store.panels) {
-        const webviewRef = webviewRefs.current.get(panel.id)
-        if (webviewRef?.getHistory) {
-          try {
-            const history = await webviewRef.getHistory()
-            if (history && history.length > 0) {
-              histories.push({
-                panelName: panel.name,
-                messages: history.map((m: any) => ({ role: m.role, content: m.content }))
-              })
-            }
-          } catch (e) {
-            console.error(`[App] Failed to get history from ${panel.name}:`, e)
-          }
-        }
-      }
-
-      if (histories.length === 0) {
-        store.setSummaryContent('未找到任何聊天历史。\n\n请先在各个 AI 模型中进行对话，然后点击"综述"按钮。')
-        return
-      }
-
-      if (store.apiKey) {
-        store.setSummaryContent('正在调用 AI 生成综述...')
-        
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${store.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: store.summaryModel,
-            messages: [
-              { role: 'system', content: '你是一个专业的 AI 回答分析助手，擅长对比和总结多个 AI 模型的回答。' },
-              { role: 'user', content: `请对以下多个 AI 模型的回答进行综合分析，生成一份简洁的综述：\n\n${histories.map(h => `=== ${h.panelName} ===\n${h.messages.map(m => `${m.role === 'user' ? '用户' : 'AI'}: ${m.content}`).join('\n')}`).join('\n\n')}` },
-            ],
-            temperature: 0.7,
-            max_tokens: 2000,
-          }),
-        })
-
-        const data = await response.json()
-        const summary = data.choices?.[0]?.message?.content
-
-        if (summary) {
-          store.setSummaryContent(summary)
-        } else {
-          store.setSummaryContent(`❌ 综述生成失败\n\n错误信息：${JSON.stringify(data)}`)
-        }
-      } else {
-        let text = '# AI 模型回答综述\n\n'
-        text += `收集时间：${new Date().toLocaleString()}\n\n`
-        text += `共收集 ${histories.length} 个模型的回答\n\n`
-        text += '---\n\n'
-
-        histories.forEach((h, i) => {
-          text += `## ${i + 1}. ${h.panelName}\n\n`
-          h.messages.forEach(m => {
-            text += `**${m.role === 'user' ? '👤 用户' : '🤖 AI'}**：\n${m.content}\n\n`
-          })
-          text += '---\n\n'
-        })
-
-        text += '\n## 使用说明\n\n'
-        text += '你可以将以上内容复制到任意 AI 模型中，让它帮你生成综合分析。\n\n'
-        text += '建议提示词："请对以上多个 AI 模型的回答进行综合分析，总结共识和差异，并给出最佳建议。"'
-
-        store.setSummaryContent(text)
-      }
-    } catch (e: any) {
-      store.setSummaryContent(`❌ 综述生成失败\n\n错误信息：${e.message}\n\n请检查：\n1. API Key 是否正确\n2. 网络连接是否正常\n3. API 余额是否充足`)
+    const enabledPanels = store.panels.filter(p => p.enabled)
+    if (enabledPanels.length === 0) {
+      store.setSummaryStatus('idle')
+      alert('没有已启用的面板。')
+      return
     }
 
-    store.setSummaryLoading(false)
+    // Initialize panel statuses
+    for (const panel of enabledPanels) {
+      store.updatePanelSummaryStatus(panel.id, { status: 'pending', panelName: panel.name })
+    }
+
+    const successfulIds: string[] = []
+
+    // Read histories in parallel
+    await Promise.all(enabledPanels.map(async (panel) => {
+      store.updatePanelSummaryStatus(panel.id, { status: 'reading' })
+      const webviewRef = webviewRefs.current.get(panel.id)
+      if (webviewRef?.getHistory) {
+        try {
+          const history = await webviewRef.getHistory()
+          if (history && history.length > 0) {
+            store.updatePanelSummaryStatus(panel.id, { 
+              status: 'success', 
+              history: history.map((m: any) => ({ role: m.role, content: m.content })) 
+            })
+            successfulIds.push(panel.id)
+          } else {
+            store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: '无聊天记录' })
+          }
+        } catch (e: any) {
+          console.error(`[App] Failed to get history from ${panel.name}:`, e)
+          store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: e.message })
+        }
+      } else {
+        store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: '未准备就绪' })
+      }
+    }))
+
+    store.setSelectedPanelIds(successfulIds)
+    store.setSummaryStatus('selecting')
+  }, [store])
+
+  const handleRunAPI = useCallback(async () => {
+    const { summaryState, summaryPrompts, apiKey } = store
+    const selectedPanels = store.panels.filter(p => summaryState.selectedPanelIds.includes(p.id))
+    
+    if (selectedPanels.length === 0) { alert('请先选择要综述的窗口'); return; }
+    if (!apiKey) { alert('请先在设置中配置 API Key'); return; }
+
+    store.setSummaryStatus('generating')
+    store.setGeneratedContent('')
+
+    let userQueriesText = ''
+    if (summaryState.userQueries.length > 0) {
+      userQueriesText = '【用户历次提问记录】\n' + 
+        summaryState.userQueries.map((q, i) => `${i + 1}. ${q}`).join('\n') + '\n'
+    }
+
+    let chatHistoriesText = ''
+    selectedPanels.forEach((panel) => {
+      const status = summaryState.panelStatuses[panel.id]
+      if (status && status.history && status.history.length > 0) {
+        const validContent = status.history.map(m => m.content.trim()).filter(content => content.length >= 10).join('\n\n')
+        if (validContent) {
+          chatHistoriesText += `\n\n>>>>>>>>>> ${panel.name} 提取内容 <<<<<<<<<<\n`
+          chatHistoriesText += validContent + '\n'
+        }
+      }
+    })
+
+    const fullPrompt = `${summaryState.customPromptContent}\n\n${userQueriesText}${chatHistoriesText}`
+    
+    const endpoints: Record<string, { url: string, model: string }> = {
+      'deepseek': { url: 'https://api.deepseek.com/v1/chat/completions', model: 'deepseek-chat' },
+      'kimi': { url: 'https://api.moonshot.cn/v1/chat/completions', model: 'moonshot-v1-8k' },
+      'gemini': { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-1.5-flash' },
+      'doubao': { url: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions', model: 'ep-xxx' },
+      'minimax': { url: 'https://api.minimax.chat/v1/text/chatcompletion_v2', model: 'abab6.5-chat' }
+    }
+
+    const config = endpoints[summaryState.summaryModel] || endpoints['deepseek']
+    let fullResult = ''
+    let buffer = '' // 数据缓冲区
+
+    // 监听流式块
+    const removeChunkListener = window.electronAPI?.summary.onProxyChunk((rawChunk) => {
+      buffer += rawChunk
+      const lines = buffer.split('\n')
+
+      // 最后一项可能是未完成的行，留回缓冲区
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed || !trimmed.startsWith('data: ')) continue
+
+        const data = trimmed.slice(6)
+        if (data === '[DONE]') continue
+
+        try {
+          const json = JSON.parse(data)
+          const content = json.choices[0]?.delta?.content || ''
+          if (content) {
+            fullResult += content
+            store.setGeneratedContent(fullResult)
+          }
+        } catch (e) {
+          // 忽略单行解析错误
+        }
+      }
+    })
+    const removeErrorListener = window.electronAPI?.summary.onProxyError((err) => {
+      store.setGeneratedContent(`❌ 生成失败: ${err}`)
+      store.setSummaryStatus('completed')
+      cleanup()
+    })
+
+    const removeEndListener = window.electronAPI?.summary.onProxyEnd(() => {
+      store.setSummaryStatus('completed')
+      cleanup()
+    })
+
+    const cleanup = () => {
+      removeChunkListener?.()
+      removeErrorListener?.()
+      removeEndListener?.()
+    }
+
+    // 发起流式请求
+    window.electronAPI?.summary.startProxyStream({
+      url: config.url,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: {
+        model: config.model,
+        messages: [{ role: 'user', content: fullPrompt }],
+      }
+    })
+  }, [store])
+
+  const handleOneClickCopy = useCallback(() => {
+    const { summaryState } = store
+    const selectedPanels = store.panels.filter(p => summaryState.selectedPanelIds.includes(p.id))
+    
+    // 1. 构建用户提问部分（从系统记录中获取，100% 准确）
+    let userQueriesText = ''
+    if (summaryState.userQueries.length > 0) {
+      userQueriesText = '【用户历次提问记录】\n' + 
+        summaryState.userQueries.map((q, i) => `${i + 1}. ${q}`).join('\n') + '\n'
+    }
+
+    // 2. 构建各模型回答部分
+    let chatHistoriesText = ''
+    selectedPanels.forEach((panel) => {
+      const status = summaryState.panelStatuses[panel.id]
+      if (status && status.history && status.history.length > 0) {
+        // 过滤并合并片段
+        const validContent = status.history
+          .map(m => m.content.trim())
+          .filter(content => content.length >= 10) // 过滤掉太短的碎片
+          .join('\n\n') // 用双换行连接段落
+
+        if (validContent) {
+          chatHistoriesText += `\n\n>>>>>>>>>> ${panel.name} 提取内容 <<<<<<<<<<\n`
+          chatHistoriesText += validContent + '\n'
+        }
+      }
+    })
+
+    const fullContent = `${summaryState.customPromptContent}\n\n${userQueriesText}${chatHistoriesText}`
+    console.log('[handleOneClickCopy] fullContent length:', fullContent.length);
+
+    if (fullContent.trim() === '') {
+      alert('没有可复制的内容。');
+      return;
+    }
+
+    try {
+      navigator.clipboard.writeText(fullContent).then(() => {
+        alert('已复制到剪贴板，可直接粘贴到 AI 窗口。')
+      }).catch(err => {
+        console.error('Clipboard write error:', err);
+        // Fallback
+        const textArea = document.createElement("textarea");
+        textArea.value = fullContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        textArea.remove();
+        alert('已复制到剪贴板(Fallback)。')
+      });
+    } catch (e) {
+        console.error('Clipboard api error:', e);
+        alert('复制失败，请重试。')
+    }
   }, [store])
 
   const sortedWorkspaces = [...store.workspaces].sort((a, b) => a.order - b.order)
@@ -202,12 +329,24 @@ function App() {
         />
 
         {/* 综述侧边栏 */}
-        {store.showSummary && (
+        {store.summaryState.show && (
           <SummaryPanel
-            content={store.summaryContent}
-            loading={store.summaryLoading}
+            summaryState={store.summaryState}
+            summaryPrompts={store.summaryPrompts}
             onClose={() => store.setShowSummary(false)}
-            onCopy={() => {}}
+            onUpdateStatus={store.setSummaryStatus}
+            onUpdatePanelStatus={store.updatePanelSummaryStatus}
+            onSetSelectedPanels={store.setSelectedPanelIds}
+            onSetSelectedPrompt={store.setSelectedPromptId}
+            onSetCustomPrompt={store.setCustomPromptContent}
+            onSetGeneratedContent={store.setGeneratedContent}
+            onSetSummaryModel={store.setSummaryModel}
+            onAddPrompt={store.addSummaryPrompt}
+            onRemovePrompt={store.removeSummaryPrompt}
+            onUpdatePrompt={store.updateSummaryPrompt}
+            onRunAPI={handleRunAPI}
+            onCopy={handleOneClickCopy}
+            onClearUserQueries={() => store.clearUserQueries(store.activeWorkspaceId)}
           />
         )}
       </div>
@@ -220,7 +359,7 @@ function App() {
         onInputChange={store.setInputText}
         onSend={handleSend}
         onSummarize={handleSummarize}
-        summaryLoading={store.summaryLoading}
+        summaryLoading={store.summaryState.status === 'reading' || store.summaryState.status === 'generating'}
       />
 
       {/* 添加模型弹窗 */}
@@ -236,7 +375,7 @@ function App() {
       {showSettings && (
         <SettingsPanel
           apiKey={store.apiKey}
-          summaryModel={store.summaryModel}
+          summaryModel={store.summaryState.summaryModel}
           onSaveApiKey={saveApiKey}
           onSaveSummaryModel={store.setSummaryModel}
           onClose={() => setShowSettings(false)}
