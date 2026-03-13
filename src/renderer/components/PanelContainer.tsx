@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react'
-import { AIPanel } from '../store/appStore'
+import { AIPanel, Workspace } from '../store/appStore'
 import WebviewPanel, { WebviewRef } from './WebviewPanel'
 
 interface PanelContainerProps {
-  panels: AIPanel[]
+  workspaces: Workspace[]
+  activeWorkspaceId: string
   onRemove: (id: string) => void
   onToggle: (id: string) => void
   onLoadingChange: (id: string, loading: boolean) => void
@@ -19,7 +20,8 @@ interface ResizeState {
 }
 
 const PanelContainer: React.FC<PanelContainerProps> = ({
-  panels,
+  workspaces,
+  activeWorkspaceId,
   onRemove,
   onToggle,
   onLoadingChange,
@@ -31,15 +33,16 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
   const resizeStateRef = useRef<ResizeState | null>(null)
   const [isResizing, setIsResizing] = useState(false)
 
-  // 处理拖拽开始
+  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
+  const activePanels = activeWorkspace?.panels || []
+
   const handleResizeStart = useCallback((panelId: string, startX: number) => {
-    const panel = panels.find(p => p.id === panelId)
+    const panel = activePanels.find(p => p.id === panelId)
     if (!panel) return
     resizeStateRef.current = { panelId, startX, startWidth: panel.width }
     setIsResizing(true)
-  }, [panels])
+  }, [activePanels])
 
-  // 全局鼠标移动处理 - 使用 requestAnimationFrame 优化性能
   useEffect(() => {
     let animationFrameId: number | null = null
     let lastMouseX = 0
@@ -48,7 +51,6 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
       if (!resizeStateRef.current) return
       lastMouseX = e.clientX
       
-      // 使用 requestAnimationFrame 避免频繁更新
       if (animationFrameId) return
       
       animationFrameId = requestAnimationFrame(() => {
@@ -58,9 +60,8 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
         const newWidth = Math.max(320, startWidth + delta)
         onPanelWidthChange(panelId, newWidth)
         
-        // 如果是最后一个面板，滚动到最右边以显示完整面板
-        const panelIndex = panels.findIndex(p => p.id === panelId)
-        if (panelIndex === panels.length - 1 && containerRef.current) {
+        const panelIndex = activePanels.findIndex(p => p.id === panelId)
+        if (panelIndex === activePanels.length - 1 && containerRef.current) {
           containerRef.current.scrollLeft = containerRef.current.scrollWidth
         }
         
@@ -89,9 +90,8 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
         cancelAnimationFrame(animationFrameId)
       }
     }
-  }, [isResizing, onPanelWidthChange, panels])
+  }, [isResizing, onPanelWidthChange, activePanels])
 
-  // 注册 webview ref
   const setWebviewRef = useCallback((panelId: string, ref: WebviewRef | null) => {
     if (ref) {
       webviewRefs.current.set(panelId, ref)
@@ -100,7 +100,52 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
     }
   }, [webviewRefs])
 
-  if (panels.length === 0) {
+  const handleRemove = useCallback((panelId: string) => {
+    const workspace = workspaces.find(w => {
+      return w.panels.some(p => p.id === panelId)
+    })
+    if (workspace) {
+      onRemove(panelId)
+    }
+  }, [workspaces, onRemove])
+
+  const handleToggle = useCallback((panelId: string) => {
+    const workspace = workspaces.find(w => {
+      return w.panels.some(p => p.id === panelId)
+    })
+    if (workspace) {
+      onToggle(panelId)
+    }
+  }, [workspaces, onToggle])
+
+  const handleLoadingChange = useCallback((panelId: string, loading: boolean) => {
+    const workspace = workspaces.find(w => {
+      return w.panels.some(p => p.id === panelId)
+    })
+    if (workspace) {
+      onLoadingChange(panelId, loading)
+    }
+  }, [workspaces, onLoadingChange])
+
+  const handleGeneratingChange = useCallback((panelId: string, generating: boolean) => {
+    const workspace = workspaces.find(w => {
+      return w.panels.some(p => p.id === panelId)
+    })
+    if (workspace) {
+      onGeneratingChange(panelId, generating)
+    }
+  }, [workspaces, onGeneratingChange])
+
+  const handleResizeStartWrapper = useCallback((panelId: string, startX: number) => {
+    const workspace = workspaces.find(w => {
+      return w.panels.some(p => p.id === panelId)
+    })
+    if (workspace && workspace.id === activeWorkspaceId) {
+      handleResizeStart(panelId, startX)
+    }
+  }, [workspaces, activeWorkspaceId, handleResizeStart])
+
+  if (workspaces.length === 0) {
     return (
       <div
         style={{
@@ -115,10 +160,7 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
       >
         <div style={{ fontSize: '48px', opacity: 0.3 }}>🤖</div>
         <div style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>
-          还没有添加任何 AI 模型
-        </div>
-        <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-          点击顶部的「添加模型」按钮开始使用
+          还没有添加任何工作区
         </div>
       </div>
     )
@@ -133,23 +175,44 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
         flexDirection: 'row',
         overflowX: 'auto',
         overflowY: 'hidden',
-        // 拖拽时禁止文字选中
         userSelect: resizeStateRef.current ? 'none' : 'auto',
       }}
     >
-      {panels.map((panel, index) => (
-        <WebviewPanel
-          key={panel.id}
-          ref={(ref) => setWebviewRef(panel.id, ref)}
-          panel={panel}
-          onRemove={onRemove}
-          onToggle={onToggle}
-          onLoadingChange={onLoadingChange}
-          onGeneratingChange={onGeneratingChange}
-          onResizeStart={handleResizeStart}
-          isLast={index === panels.length - 1}
-        />
-      ))}
+      {workspaces.map(workspace => {
+        const isActive = workspace.id === activeWorkspaceId
+        const panels = workspace.panels
+
+        if (panels.length === 0) {
+          return null
+        }
+
+        return (
+          <div
+            key={workspace.id}
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              flexShrink: 0,
+              visibility: isActive ? 'visible' : 'hidden',
+              width: isActive ? 'auto' : 0,
+              overflow: 'hidden',
+            }}
+          >
+            {panels.map((panel, index) => (
+              <WebviewPanel
+                key={panel.id}
+                ref={(ref) => setWebviewRef(panel.id, ref)}
+                panel={panel}
+                onRemove={handleRemove}
+                onToggle={handleToggle}
+                onLoadingChange={handleLoadingChange}
+                onGeneratingChange={handleGeneratingChange}
+                onResizeStart={handleResizeStartWrapper}
+                isLast={index === panels.length - 1}
+              />
+            ))}
+          </div>
+        )})}
     </div>
   )
 }
