@@ -129,45 +129,8 @@ const GlobalInput: React.FC<GlobalInputProps> = ({
         gap: '8px',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>发送至：</span>
-        {enabledPanels.length === 0 ? (
-          <span style={{ fontSize: '11px', color: 'var(--accent-red)' }}>⚠ 没有启用的模型</span>
-        ) : (
-          enabledPanels.map(p => (
-            <span
-              key={p.id}
-              style={{
-                fontSize: '11px',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                background: p.generating ? 'rgba(76, 175, 80, 0.15)' : `${p.color}22`,
-                color: p.generating ? '#4caf50' : p.color,
-                border: `1px solid ${p.generating ? 'rgba(76,175,80,0.3)' : `${p.color}44`}`,
-                fontWeight: 600,
-              }}
-            >
-              {p.generating && '● '}{p.icon} {p.name}
-            </span>
-          ))
-        )}
-        
-        {generatingPanels.length > 0 && (
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-            {generatingPanels.length} 个模型正在回复...
-          </span>
-        )}
-        
-        <button
-          onClick={() => setIsExpanded(false)}
-          style={{ marginLeft: 'auto', background: 'transparent', color: 'var(--text-muted)', fontSize: '12px', padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-        >
-          ▼ 收起
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
-        <div style={{ flex: 1, background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 12px' }}>
+      <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch' }}>
+        <div style={{ flex: 1, background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px', display: 'flex', alignItems: 'center' }}>
           <input
             ref={inputRef}
             type="text"
@@ -185,7 +148,6 @@ const GlobalInput: React.FC<GlobalInputProps> = ({
               border: 'none',
               outline: 'none',
               fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif',
-              display: 'block',
             }}
           />
         </div>
@@ -195,34 +157,38 @@ const GlobalInput: React.FC<GlobalInputProps> = ({
             onClick={onSend}
             disabled={isSending || enabledPanels.length === 0}
             style={{
+              flex: 1, // 让按钮平分高度
               background: isSending || enabledPanels.length === 0 ? 'var(--bg-tertiary)' : 'var(--accent-blue)',
               color: isSending || enabledPanels.length === 0 ? 'var(--text-muted)' : 'white',
               border: 'none',
               borderRadius: '6px',
-              padding: '10px 20px',
+              padding: '0 20px',
               fontSize: '14px',
               fontWeight: 600,
               minWidth: '100px',
+              cursor: 'pointer',
             }}
           >
-            {isSending ? '⟳ 发送中' : '➤ 发送'}
+            {isSending ? '⟳' : '➤ 发送'}
           </button>
 
           <button
             onClick={onSummarize}
             disabled={summaryLoading || panels.length === 0}
             style={{
+              flex: 1, // 让按钮平分高度
               background: summaryLoading ? 'var(--bg-tertiary)' : 'rgba(156, 39, 176, 0.15)',
               color: summaryLoading ? 'var(--text-muted)' : '#ce93d8',
               border: `1px solid ${summaryLoading ? 'var(--border-color)' : 'rgba(156,39,176,0.3)'}`,
               borderRadius: '6px',
-              padding: '8px 16px',
+              padding: '0 16px',
               fontSize: '13px',
               fontWeight: 600,
               minWidth: '100px',
+              cursor: 'pointer',
             }}
           >
-            {summaryLoading ? '⟳ 综述中' : '📊 综述'}
+            {summaryLoading ? '⟳' : '📊 综述'}
           </button>
         </div>
       </div>

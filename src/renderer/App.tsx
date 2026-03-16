@@ -69,10 +69,6 @@ function App() {
   const handleSummarize = useCallback(async () => {
     if (store.summaryState.status === 'reading' || store.summaryState.status === 'generating') return
 
-    store.setShowSummary(true)
-    store.setSummaryStatus('reading')
-    store.setGeneratedContent('')
-
     const enabledPanels = store.panels.filter(p => p.enabled)
     if (enabledPanels.length === 0) {
       store.setSummaryStatus('idle')
@@ -80,20 +76,43 @@ function App() {
       return
     }
 
-    // Initialize panel statuses
+    store.setShowSummary(true)
+    store.setSummaryStatus('reading')
+    store.setGeneratedContent('')
+
+    // 【核心修复】重置面板状态，并确保 selectedPanelIds 为空（待读取成功后填充）
+    store.setSelectedPanelIds([])
+    
+    // 初始化活跃面板的状态
     for (const panel of enabledPanels) {
-      store.updatePanelSummaryStatus(panel.id, { status: 'pending', panelName: panel.name })
+      store.updatePanelSummaryStatus(panel.id, { status: 'pending', panelName: panel.name, history: [] })
     }
 
     const successfulIds: string[] = []
 
-    // Read histories in parallel
+    // 并行读取历史
     await Promise.all(enabledPanels.map(async (panel) => {
+      console.log(`[Summary] Attempting to read from panel: ${panel.name} (${panel.id})`)
       store.updatePanelSummaryStatus(panel.id, { status: 'reading' })
+      
       const webviewRef = webviewRefs.current.get(panel.id)
-      if (webviewRef?.getHistory) {
+      
+      if (!webviewRef) {
+        console.error(`[Summary] Ref not found for panel: ${panel.name} (${panel.id})`)
+        store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: '窗口引用丢失' })
+        return
+      }
+
+      if (webviewRef.getHistory) {
         try {
           const history = await webviewRef.getHistory()
+          
+          // 检查是否包含系统级错误
+          const firstMsg = history[0]
+          if (firstMsg && firstMsg.role === 'system' && firstMsg.content.startsWith('ERR_EXTRACT')) {
+            throw new Error(firstMsg.content)
+          }
+
           if (history && history.length > 0) {
             store.updatePanelSummaryStatus(panel.id, { 
               status: 'success', 
@@ -101,17 +120,19 @@ function App() {
             })
             successfulIds.push(panel.id)
           } else {
-            store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: '无聊天记录' })
+            store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: '页面内未找到对话' })
           }
         } catch (e: any) {
-          console.error(`[App] Failed to get history from ${panel.name}:`, e)
-          store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: e.message })
+          console.error(`[Summary] Script execution failed for ${panel.name}:`, e)
+          store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: '脚本执行异常' })
         }
       } else {
-        store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: '未准备就绪' })
+        console.error(`[Summary] getHistory method not found on ref for panel: ${panel.name}`)
+        store.updatePanelSummaryStatus(panel.id, { status: 'failed', error: '接口未就绪' })
       }
     }))
 
+    // 默认全选成功读取内容的活跃面板
     store.setSelectedPanelIds(successfulIds)
     store.setSummaryStatus('selecting')
   }, [store])
@@ -159,7 +180,7 @@ function App() {
     let buffer = '' // 数据缓冲区
 
     // 监听流式块
-    const removeChunkListener = window.electronAPI?.summary.onProxyChunk((rawChunk) => {
+    const removeChunkListener = window.electronAPI?.summary.onProxyChunk((rawChunk: string) => {
       buffer += rawChunk
       const lines = buffer.split('\n')
 
@@ -185,7 +206,7 @@ function App() {
         }
       }
     })
-    const removeErrorListener = window.electronAPI?.summary.onProxyError((err) => {
+    const removeErrorListener = window.electronAPI?.summary.onProxyError((err: string) => {
       store.setGeneratedContent(`❌ 生成失败: ${err}`)
       store.setSummaryStatus('completed')
       cleanup()
@@ -274,8 +295,6 @@ function App() {
     }
   }, [store])
 
-  const sortedWorkspaces = [...store.workspaces].sort((a, b) => a.order - b.order)
-
   return (
     <div
       style={{
@@ -316,7 +335,7 @@ function App() {
           onToggleCollapse={() => store.setSidebarCollapsed(!store.sidebarCollapsed)}
         />
 
-        {/* 并排 WebView 面板 - 传递所有工作区的面板 */}
+        {/* 并排 WebView 面板 */}
         <PanelContainer
           workspaces={store.workspaces}
           activeWorkspaceId={store.activeWorkspaceId}
@@ -326,6 +345,8 @@ function App() {
           onGeneratingChange={store.updatePanelGenerating}
           onPanelWidthChange={store.updatePanelWidth}
           webviewRefs={webviewRefs}
+          maximizedPanelId={store.maximizedPanelId}
+          onSetMaximized={store.setMaximizedPanelId}
         />
 
         {/* 综述侧边栏 */}
@@ -333,6 +354,7 @@ function App() {
           <SummaryPanel
             summaryState={store.summaryState}
             summaryPrompts={store.summaryPrompts}
+            enabledPanelIds={store.panels.filter(p => p.enabled).map(p => p.id)}
             onClose={() => store.setShowSummary(false)}
             onUpdateStatus={store.setSummaryStatus}
             onUpdatePanelStatus={store.updatePanelSummaryStatus}

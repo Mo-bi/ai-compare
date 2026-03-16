@@ -4,6 +4,7 @@ import { SummaryState, SummaryPrompt, PanelSummaryStatus, SUMMARY_MODELS } from 
 interface SummaryPanelProps {
   summaryState: SummaryState
   summaryPrompts: SummaryPrompt[]
+  enabledPanelIds: string[] // 【新增】当前工作区已启用的面板ID列表
   onClose: () => void
   onUpdateStatus: (status: SummaryState['status']) => void
   onUpdatePanelStatus: (panelId: string, status: Partial<PanelSummaryStatus>) => void
@@ -23,6 +24,7 @@ interface SummaryPanelProps {
 const SummaryPanel: React.FC<SummaryPanelProps> = ({
   summaryState,
   summaryPrompts,
+  enabledPanelIds,
   onClose,
   onUpdateStatus,
   onUpdatePanelStatus,
@@ -59,7 +61,9 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
   }
 
   const renderReadingStatus = () => {
-    const panelIds = Object.keys(summaryState.panelStatuses)
+    // 【核心修复】只展示当前活跃面板的读取状态
+    const panelIds = Object.keys(summaryState.panelStatuses).filter(id => enabledPanelIds.includes(id))
+    
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <h3 style={{ fontSize: '14px', marginBottom: '8px' }}>正在读取聊天历史...</h3>
@@ -74,10 +78,10 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
                 {status.status === 'pending' && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--border-color)' }} />}
               </div>
               <span style={{ flex: 1, color: 'var(--text-primary)' }}>{status.panelName}</span>
-              <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+              <span style={{ color: status.status === 'failed' ? '#f44336' : 'var(--text-muted)', fontSize: '12px' }}>
                 {status.status === 'reading' ? '读取中...' : 
                  status.status === 'success' ? '已完成' : 
-                 status.status === 'failed' ? '失败' : '等待中'}
+                 status.status === 'failed' ? (status.error || '失败') : '等待中'}
               </span>
             </div>
           )
@@ -87,8 +91,9 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
   }
 
   const renderSelection = () => {
+    // 【核心修复】只显示读取成功的、且当前仍处于启用状态的面板
     const successfulPanels = Object.entries(summaryState.panelStatuses)
-      .filter(([_, s]) => s.status === 'success')
+      .filter(([id, s]) => s.status === 'success' && enabledPanelIds.includes(id))
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -166,7 +171,15 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
           </select>
           <textarea
             value={summaryState.customPromptContent}
-            onChange={(e) => onSetCustomPrompt(e.target.value)}
+            onChange={(e) => {
+              const newContent = e.target.value
+              // 1. 同步当前工作区的临时显示
+              onSetCustomPrompt(newContent)
+              // 2. 【关键修复】同步回原始模板，触发持久化保存
+              if (summaryState.selectedPromptId) {
+                onUpdatePrompt(summaryState.selectedPromptId, newContent)
+              }
+            }}
             style={{ 
               width: '100%', 
               height: '150px', 

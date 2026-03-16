@@ -11,6 +11,8 @@ interface PanelContainerProps {
   onGeneratingChange: (id: string, generating: boolean) => void
   onPanelWidthChange: (id: string, width: number) => void
   webviewRefs: React.MutableRefObject<Map<string, WebviewRef>>
+  maximizedPanelId: string | null
+  onSetMaximized: (id: string | null) => void
 }
 
 interface ResizeState {
@@ -28,11 +30,14 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
   onGeneratingChange,
   onPanelWidthChange,
   webviewRefs,
+  maximizedPanelId,
+  onSetMaximized
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const resizeStateRef = useRef<ResizeState | null>(null)
   const [isResizing, setIsResizing] = useState(false)
 
+  // 获取当前工作区的面板，仅用于计算 resize 逻辑
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
   const activePanels = activeWorkspace?.panels || []
 
@@ -59,12 +64,6 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
         const delta = lastMouseX - startX
         const newWidth = Math.max(320, startWidth + delta)
         onPanelWidthChange(panelId, newWidth)
-        
-        const panelIndex = activePanels.findIndex(p => p.id === panelId)
-        if (panelIndex === activePanels.length - 1 && containerRef.current) {
-          containerRef.current.scrollLeft = containerRef.current.scrollWidth
-        }
-        
         animationFrameId = null
       })
     }
@@ -90,7 +89,7 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
         cancelAnimationFrame(animationFrameId)
       }
     }
-  }, [isResizing, onPanelWidthChange, activePanels])
+  }, [isResizing, onPanelWidthChange])
 
   const setWebviewRef = useCallback((panelId: string, ref: WebviewRef | null) => {
     if (ref) {
@@ -100,68 +99,19 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
     }
   }, [webviewRefs])
 
-  const handleRemove = useCallback((panelId: string) => {
-    const workspace = workspaces.find(w => {
-      return w.panels.some(p => p.id === panelId)
-    })
-    if (workspace) {
-      onRemove(panelId)
+  const handleToggleMaximize = useCallback((panelId: string) => {
+    if (maximizedPanelId === panelId) {
+      onSetMaximized(null)
+    } else {
+      onSetMaximized(panelId)
     }
-  }, [workspaces, onRemove])
-
-  const handleToggle = useCallback((panelId: string) => {
-    const workspace = workspaces.find(w => {
-      return w.panels.some(p => p.id === panelId)
-    })
-    if (workspace) {
-      onToggle(panelId)
-    }
-  }, [workspaces, onToggle])
-
-  const handleLoadingChange = useCallback((panelId: string, loading: boolean) => {
-    const workspace = workspaces.find(w => {
-      return w.panels.some(p => p.id === panelId)
-    })
-    if (workspace) {
-      onLoadingChange(panelId, loading)
-    }
-  }, [workspaces, onLoadingChange])
-
-  const handleGeneratingChange = useCallback((panelId: string, generating: boolean) => {
-    const workspace = workspaces.find(w => {
-      return w.panels.some(p => p.id === panelId)
-    })
-    if (workspace) {
-      onGeneratingChange(panelId, generating)
-    }
-  }, [workspaces, onGeneratingChange])
-
-  const handleResizeStartWrapper = useCallback((panelId: string, startX: number) => {
-    const workspace = workspaces.find(w => {
-      return w.panels.some(p => p.id === panelId)
-    })
-    if (workspace && workspace.id === activeWorkspaceId) {
-      handleResizeStart(panelId, startX)
-    }
-  }, [workspaces, activeWorkspaceId, handleResizeStart])
+  }, [maximizedPanelId, onSetMaximized])
 
   if (workspaces.length === 0) {
     return (
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--text-muted)',
-          gap: '16px',
-        }}
-      >
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', gap: '16px' }}>
         <div style={{ fontSize: '48px', opacity: 0.3 }}>🤖</div>
-        <div style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>
-          还没有添加任何工作区
-        </div>
+        <div style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>还没有添加任何工作区</div>
       </div>
     )
   }
@@ -173,46 +123,68 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
         flex: 1,
         display: 'flex',
         flexDirection: 'row',
-        overflowX: 'auto',
-        overflowY: 'hidden',
+        overflow: 'hidden', // 容器本身不滚动，由内部 active 工作区滚动
         userSelect: resizeStateRef.current ? 'none' : 'auto',
+        background: 'var(--bg-tertiary)',
+        width: '100%',
+        height: '100%',
+        position: 'relative',
       }}
     >
       {workspaces.map(workspace => {
         const isActive = workspace.id === activeWorkspaceId
         const panels = workspace.panels
 
-        if (panels.length === 0) {
-          return null
-        }
-
         return (
           <div
             key={workspace.id}
             style={{
-              display: 'flex',
+              display: isActive ? 'flex' : 'none', // 【核心】隐藏而非卸载，保持状态
               flexDirection: 'row',
-              flexShrink: 0,
-              visibility: isActive ? 'visible' : 'hidden',
-              width: isActive ? 'auto' : 0,
-              overflow: 'hidden',
+              width: '100%',
+              height: '100%',
+              overflowX: (maximizedPanelId && isActive) ? 'hidden' : 'auto',
+              overflowY: 'hidden',
+              position: 'absolute', // 重叠定位，通过 display 切换
+              left: 0,
+              top: 0,
             }}
           >
-            {panels.map((panel, index) => (
-              <WebviewPanel
-                key={panel.id}
-                ref={(ref) => setWebviewRef(panel.id, ref)}
-                panel={panel}
-                onRemove={handleRemove}
-                onToggle={handleToggle}
-                onLoadingChange={handleLoadingChange}
-                onGeneratingChange={handleGeneratingChange}
-                onResizeStart={handleResizeStartWrapper}
-                isLast={index === panels.length - 1}
-              />
-            ))}
+            {panels.map((panel, index) => {
+              const isMaximized = maximizedPanelId === panel.id
+              // 如果本工作区有放大，且当前面板不是放大的那个，则在 UI 上隐藏
+              const isHiddenInWorkspace = maximizedPanelId && !isMaximized
+
+              return (
+                <div 
+                  key={panel.id} 
+                  style={{ 
+                    width: isMaximized ? '100%' : `${panel.width}px`,
+                    height: '100%',
+                    flexShrink: 0,
+                    flex: isMaximized ? 1 : (maximizedPanelId ? 0 : 1), 
+                    display: isHiddenInWorkspace ? 'none' : 'flex',
+                    minWidth: isMaximized ? '100%' : '320px',
+                  }}
+                >
+                  <WebviewPanel
+                    ref={(ref) => setWebviewRef(panel.id, ref)}
+                    panel={panel}
+                    isMaximized={isMaximized}
+                    onRemove={onRemove}
+                    onToggle={onToggle}
+                    onToggleMaximize={handleToggleMaximize}
+                    onLoadingChange={onLoadingChange}
+                    onGeneratingChange={onGeneratingChange}
+                    onResizeStart={handleResizeStart}
+                    isLast={index === panels.length - 1 || !!maximizedPanelId}
+                  />
+                </div>
+              )
+            })}
           </div>
-        )})}
+        )
+      })}
     </div>
   )
 }
