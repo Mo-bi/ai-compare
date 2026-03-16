@@ -224,14 +224,17 @@ app.whenReady().then(() => {
     // 识别是否为 webview
     if (contents.getType() === 'webview') {
       // 1. 强制设置现代浏览器 User-Agent，绕过网站的“非标浏览器”拦截
-      contents.setUserAgent(CHROME_UA)
+      (contents as any).setUserAgent(CHROME_UA);
 
-      // 2. 授权 WebAuthn 请求 (Passkeys)
-      contents.session.setWebAuthnHandler((_details) => {
-        // 自动允许使用平台认证器 (Touch ID)
-        // 在正式打包并签名后，这里会触发 macOS 系统弹窗
-        return { action: 'allow' }
-      })
+      // 2. 授权 WebAuthn 请求 (Passkeys) - 增加运行时安全检查
+      const session = contents.session as any;
+      if (typeof session.setWebAuthnHandler === 'function') {
+        session.setWebAuthnHandler((_details: any) => {
+          // 自动允许使用平台认证器 (Touch ID)
+          // 在正式打包并签名后，这里会触发 macOS 系统弹窗
+          return { action: 'allow' };
+        });
+      }
     }
   })
 
