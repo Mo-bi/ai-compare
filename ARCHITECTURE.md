@@ -30,36 +30,34 @@
 - 横向滚动支持（overflow-x: auto）
 - 最后一个窗口可以向右扩展，不会挤压其他窗口
 
-### 2. 统一输入框同步发送
+### 2. 统一极简输入框
 
 - 底部固定输入框（支持多行、快捷键 Ctrl+Enter 发送）
+- **极简设计**：移除了输入框上方冗余的模型状态标签，更加专注输入。
 - 点击发送后，遍历所有 webview，调用各自的 `sendMessage(text)` 方法
 - 每个 AI 网站有独立的 JS 注入脚本（处理不同 DOM 结构）
 - 输入框空闲 3 秒后自动收起，点击可展开
 
 ### 3. 各 AI 网站消息发送 JS 注入策略
 
-每个 AI 网站的输入框 DOM 结构不同，需要针对性处理：
+每个 AI 网站的输入框 DOM 结构不同，特别针对富文本编辑器（如 Slate.js）进行了深度适配：
 
-| AI 网站    | URL                 | 输入框选择器                                 | 发送方式                     |
+| AI 网站    | URL                 | 输入框特征 / 方案                           | 发送方式                     |
 | -------- | ------------------- | -------------------------------------- | ------------------------ |
-| 豆包       | doubao.com          | `[data-testid="chat_input_input"]`     | 模拟输入事件                   |
-| Kimi     | kimi.moonshot.cn    | `[data-testid="msh-chatinput-editor"]` | contenteditable 注入       |
-| 智谱清言     | chatglm.cn          | `textarea`, `div[contenteditable]`     | 模拟输入                     |
-| 腾讯元宝     | yuanbao.tencent.com | `[data-testid="chat-input"]`           | 模拟输入                     |
-| 通义千问     | tongyi.aliyun.com   | `textarea`                             | 模拟输入                     |
-| 文心一言     | yiyan.baidu.com     | `textarea`, `.yc-editor`               | 模拟输入                     |
-| DeepSeek | chat.deepseek.com   | `textarea._27c9245`                    | dispatchEvent input + 回车 |
-| MiniMax  | minimaxi.com        | `textarea`                             | 模拟输入                     |
-| Gemini   | gemini.google.com   | `rich-textarea`                        | 模拟输入                     |
+| 文心一言     | yiyan.baidu.com     | Slate.js 富文本编辑器                    | 模拟 `execCommand` 插入与事件派发 |
+| 腾讯元宝     | yuanbao.tencent.com | Slate.js 富文本编辑器                    | 模拟 `execCommand` 插入与事件派发 |
+| Kimi     | kimi.moonshot.cn    | `contenteditable` 输入框               | 模拟 `execCommand` 插入文本 |
+| 豆包       | doubao.com          | 拦截 `HTMLTextAreaElement` 原型         | 拦截原型 `set` 方法触发更新 |
+| 智谱清言     | chatglm.cn          | `textarea`                             | 模拟输入                     |
+| DeepSeek | chat.deepseek.com   | `textarea`                             | 拦截原型 `set` + dispatchEvent |
 
 ### 4. 聊天历史读取（汇总综述核心）
 
-**方案：地毯式搜索 + 最末端节点去重 (Leaf-Node Strategy)**
+**方案：全量底层节点探测 + 最末端节点去重 (Leaf-Node Strategy)**
 
-- 通过 `webview.executeJavaScript()` 遍历网页中所有包含文本的元素。
-- **物理去重**：脚本自动检查节点包含关系。若节点 A 包含节点 B 且内容重合，则彻底丢弃 A（父节点），仅保留最深层的 B（叶子节点），解决 HTML 嵌套导致的重复抓取。
-- **侧边栏屏蔽**：基于坐标系统，自动过滤 WebView 左侧 15% 区域，彻底屏蔽历史对话列表的干扰。
+- **更强的兼容性**：遍历网页中所有包含文本的底层节点（`div`, `p`, `pre` 及常见消息容器类名），无论网站如何改版，只要有文字就能抓到。
+- **智能排重**：基于文本内容和坐标位置(`getBoundingClientRect`)，即使长文本被截断或存在嵌套，也能通过相似度和位置关系完美去重。
+- **侧边栏与死区屏蔽**：基于坐标系统，自动过滤过短碎词和左侧导航栏等非对话区域。
 
 ### 5. 高级汇总综述系统
 
@@ -72,9 +70,10 @@
 - **流式转发**：主进程使用 Node.js Stream 读取 API 响应，并通过 `webContents.send` 将 Data Chunk 实时推送给渲染进程。
 - **SSE 解析**：前端采用缓冲区 (Buffer) 机制解析 SSE 格式消息，确保在网络分包情况下依然能平滑输出。
 
-#### C. 磁盘持久化 (Disk Persistence)
+#### C. 磁盘实时持久化 (Real-time Disk Persistence)
 - **存储路径**：自定义 Prompt 模板存储于 `app.getPath('userData')/summary_prompts.json`。
-- **稳定性**：独立于浏览器缓存，支持跨版本升级和卸载重装后的数据自动恢复。
+- **实时同步**：用户在综述面板对模板的任何新增、修改，都会 **实时覆盖更新到本地磁盘**。
+- **重装不丢**：独立于浏览器缓存，支持跨版本升级和应用卸载重装后的数据自动恢复。
 
 ### 6. macOS 钥匙串集成
 

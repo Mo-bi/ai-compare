@@ -217,6 +217,24 @@ app.whenReady().then(() => {
   
   createWindow()
 
+  // --- 【新增】全局 WebAuthn (Passkey) 与 User-Agent 支持 ---
+  const CHROME_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+
+  app.on('web-contents-created', (_event, contents) => {
+    // 识别是否为 webview
+    if (contents.getType() === 'webview') {
+      // 1. 强制设置现代浏览器 User-Agent，绕过网站的“非标浏览器”拦截
+      contents.setUserAgent(CHROME_UA)
+
+      // 2. 授权 WebAuthn 请求 (Passkeys)
+      contents.session.setWebAuthnHandler((_details) => {
+        // 自动允许使用平台认证器 (Touch ID)
+        // 在正式打包并签名后，这里会触发 macOS 系统弹窗
+        return { action: 'allow' }
+      })
+    }
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()

@@ -3,6 +3,7 @@ import { useState, useCallback, useEffect } from 'react'
 export interface AIPanel {
   id: string
   aiId: string
+  persistentId: string // 【新增】用于稳定 partition 的持久化 ID
   name: string
   url: string
   icon: string
@@ -35,7 +36,7 @@ export interface SummaryState {
   customPromptContent: string
   generatedContent: string
   summaryModel: string
-  userQueries: string[] // 【新增】存储用户发送过的全局提问
+  userQueries: string[]
   loading: boolean
 }
 
@@ -46,6 +47,7 @@ export interface Workspace {
   isFixed: boolean
   order: number
   summaryState: SummaryState
+  maximizedPanelId: string | null
 }
 
 export interface Message {
@@ -55,6 +57,7 @@ export interface Message {
   aiId: string
   timestamp: number
 }
+
 const DEFAULT_SUMMARY_PROMPT = `# Role: 高级 AI 智库综述专家
 # Task: 多模型对话深度整合与对比分析
 
@@ -94,7 +97,6 @@ export const SUMMARY_MODELS = [
   { id: 'kimi', name: 'Kimi' },
   { id: 'deepseek', name: 'DeepSeek' },
   { id: 'gemini', name: 'Gemini' },
-  { id: 'minimax', name: 'MiniMax' },
   { id: 'doubao', name: '豆包' }
 ]
 
@@ -103,11 +105,9 @@ export const AI_PRESETS = [
   { id: 'deepseek', name: 'DeepSeek', url: 'https://chat.deepseek.com', icon: '🔍', color: '#4d6bfe' },
   { id: 'doubao', name: '豆包', url: 'https://www.doubao.com/chat/', icon: '🫘', color: '#1664ff' },
   { id: 'kimi', name: 'Kimi', url: 'https://kimi.moonshot.cn', icon: '🌙', color: '#ff6600' },
-  { id: 'qwen', name: '通义千问', url: 'https://tongyi.aliyun.com/qianwen/', icon: '🌊', color: '#ff6a00' },
   { id: 'yuanbao', name: '腾讯元宝', url: 'https://yuanbao.tencent.com/chat', icon: '💎', color: '#07c160' },
   { id: 'yiyan', name: '文心一言', url: 'https://yiyan.baidu.com/', icon: '📖', color: '#2932e1' },
   { id: 'chatglm', name: '智谱清言', url: 'https://chatglm.cn/', icon: '🌸', color: '#de3a3a' },
-  { id: 'minimax', name: 'MiniMax', url: 'https://www.minimaxi.com/', icon: '🎯', color: '#ff6b35' },
 ]
 
 const DEFAULT_PANEL_WIDTH = 480
@@ -125,10 +125,10 @@ function createWorkspaceId() {
 
 function createDefaultPanels(): AIPanel[] {
   return [
-    { id: createPanelId('doubao'), aiId: 'doubao', name: '豆包', url: 'https://www.doubao.com/chat/', icon: '🫘', color: '#1664ff', width: DEFAULT_PANEL_WIDTH, enabled: true, loading: true, generating: false },
-    { id: createPanelId('kimi'), aiId: 'kimi', name: 'Kimi', url: 'https://kimi.moonshot.cn', icon: '🌙', color: '#ff6600', width: DEFAULT_PANEL_WIDTH, enabled: true, loading: true, generating: false },
-    { id: createPanelId('chatglm'), aiId: 'chatglm', name: '智谱清言', url: 'https://chatglm.cn/', icon: '🌸', color: '#de3a3a', width: DEFAULT_PANEL_WIDTH, enabled: true, loading: true, generating: false },
-    { id: createPanelId('yuanbao'), aiId: 'yuanbao', name: '腾讯元宝', url: 'https://yuanbao.tencent.com/chat', icon: '💎', color: '#07c160', width: DEFAULT_PANEL_WIDTH, enabled: true, loading: true, generating: false },
+    { id: createPanelId('doubao'), aiId: 'doubao', persistentId: 'default-doubao', name: '豆包', url: 'https://www.doubao.com/chat/', icon: '🫘', color: '#1664ff', width: DEFAULT_PANEL_WIDTH, enabled: true, loading: true, generating: false },
+    { id: createPanelId('kimi'), aiId: 'kimi', persistentId: 'default-kimi', name: 'Kimi', url: 'https://kimi.moonshot.cn', icon: '🌙', color: '#ff6600', width: DEFAULT_PANEL_WIDTH, enabled: true, loading: true, generating: false },
+    { id: createPanelId('chatglm'), aiId: 'chatglm', persistentId: 'default-chatglm', name: '智谱清言', url: 'https://chatglm.cn/', icon: '🌸', color: '#de3a3a', width: DEFAULT_PANEL_WIDTH, enabled: true, loading: true, generating: false },
+    { id: createPanelId('yuanbao'), aiId: 'yuanbao', persistentId: 'default-yuanbao', name: '腾讯元宝', url: 'https://yuanbao.tencent.com/chat', icon: '💎', color: '#07c160', width: DEFAULT_PANEL_WIDTH, enabled: true, loading: true, generating: false },
   ]
 }
 
@@ -142,7 +142,7 @@ function createDefaultSummaryState(): SummaryState {
     customPromptContent: '',
     generatedContent: '',
     summaryModel: 'deepseek',
-    userQueries: [], // 初始化提问历史
+    userQueries: [], 
     loading: false
   }
 }
@@ -154,7 +154,8 @@ function createDefaultWorkspace(index: number): Workspace {
     panels: createDefaultPanels(),
     isFixed: true,
     order: index - 1,
-    summaryState: createDefaultSummaryState()
+    summaryState: createDefaultSummaryState(),
+    maximizedPanelId: null
   }
 }
 
@@ -162,16 +163,17 @@ function loadFromLocalStorage(): { workspaces: Workspace[], activeWorkspaceId: s
   try {
     const saved = localStorage.getItem('ai-compare-workspaces')
     const savedPrompts = localStorage.getItem('ai-compare-summary-prompts')
-    let summaryPrompts = INITIAL_PROMPTS
+    let summaryPrompts = [...INITIAL_PROMPTS]
+    
     if (savedPrompts) {
-      const parsed = JSON.parse(savedPrompts)
-      // 【强制更新】如果本地存储包含 default 模板，用最新的 INITIAL_PROMPTS 里的替换它
-      summaryPrompts = parsed.map((p: SummaryPrompt) => 
-        p.id === 'default' ? INITIAL_PROMPTS[0] : p
-      )
-      // 如果本地没有 default，补上它
-      if (!summaryPrompts.some(p => p.id === 'default')) {
-        summaryPrompts = [INITIAL_PROMPTS[0], ...summaryPrompts]
+      try {
+        const parsed = JSON.parse(savedPrompts)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const userPrompts = parsed.filter((p: any) => p.id !== 'default')
+          summaryPrompts = [INITIAL_PROMPTS[0], ...userPrompts]
+        }
+      } catch (e) {
+        console.error('Failed to parse saved prompts:', e)
       }
     }
 
@@ -179,7 +181,13 @@ function loadFromLocalStorage(): { workspaces: Workspace[], activeWorkspaceId: s
       const data = JSON.parse(saved)
       const workspaces = (data.workspaces || []).map((w: any) => ({
         ...w,
-        summaryState: w.summaryState || createDefaultSummaryState()
+        summaryState: w.summaryState || createDefaultSummaryState(),
+        maximizedPanelId: w.maximizedPanelId || null,
+        panels: (w.panels || []).map((p: any) => ({
+          ...p,
+          // 如果旧数据没有 persistentId，为其补上一个
+          persistentId: p.persistentId || p.id || Math.random().toString(36).substring(7)
+        }))
       }))
       return {
         workspaces,
@@ -197,7 +205,16 @@ function loadFromLocalStorage(): { workspaces: Workspace[], activeWorkspaceId: s
 function saveToLocalStorage(workspaces: Workspace[], activeWorkspaceId: string, sidebarCollapsed: boolean, summaryPrompts: SummaryPrompt[]) {
   try {
     localStorage.setItem('ai-compare-workspaces', JSON.stringify({
-      workspaces,
+      workspaces: workspaces.map(w => ({
+        ...w,
+        summaryState: {
+          ...w.summaryState,
+          status: 'idle',
+          panelStatuses: {},
+          generatedContent: '',
+          loading: false
+        }
+      })),
       activeWorkspaceId,
       sidebarCollapsed
     }))
@@ -235,21 +252,15 @@ export function useAppStore() {
   })
   
   const [sidebarCollapsed, setSidebarCollapsed] = useState(savedData.sidebarCollapsed)
-  const [summaryPrompts, setSummaryPrompts] = useState<SummaryPrompt[]>(INITIAL_PROMPTS)
+  const [summaryPrompts, setSummaryPrompts] = useState<SummaryPrompt[]>(savedData.summaryPrompts)
   
-  // 【新增】从磁盘加载持久化模板
   useEffect(() => {
     const loadDiskPrompts = async () => {
       try {
         const diskPrompts = await window.electronAPI?.summary.loadPrompts()
         if (diskPrompts && diskPrompts.length > 0) {
-          // 合并：强制用 INITIAL_PROMPTS 更新 default，其余保留用户的
-          const merged = diskPrompts.map((p: SummaryPrompt) => 
-            p.id === 'default' ? INITIAL_PROMPTS[0] : p
-          )
-          if (!merged.find((p: SummaryPrompt) => p.id === 'default')) {
-            merged.unshift(INITIAL_PROMPTS[0])
-          }
+          const userPrompts = diskPrompts.filter((p: SummaryPrompt) => p.id !== 'default')
+          const merged = [INITIAL_PROMPTS[0], ...userPrompts]
           setSummaryPrompts(merged)
         }
       } catch (e) {
@@ -259,7 +270,6 @@ export function useAppStore() {
     loadDiskPrompts()
   }, [])
 
-  // 【新增】当模板变化时自动同步到磁盘
   useEffect(() => {
     if (summaryPrompts.length > 0) {
       window.electronAPI?.summary.savePrompts(summaryPrompts)
@@ -274,6 +284,7 @@ export function useAppStore() {
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
   const panels = activeWorkspace?.panels || []
   const summaryState = activeWorkspace?.summaryState || createDefaultSummaryState()
+  const maximizedPanelId = activeWorkspace?.maximizedPanelId || null
 
   useEffect(() => {
     saveToLocalStorage(workspaces, activeWorkspaceId, sidebarCollapsed, summaryPrompts)
@@ -290,6 +301,11 @@ export function useAppStore() {
     }))
   }, [updateWorkspace])
 
+  const setMaximizedPanelId = useCallback((panelId: string | null) => {
+    if (!activeWorkspaceId) return
+    updateWorkspace(activeWorkspaceId, w => ({ ...w, maximizedPanelId: panelId }))
+  }, [activeWorkspaceId, updateWorkspace])
+
   const addPanel = useCallback((aiId: string) => {
     if (!activeWorkspaceId) return
     const preset = AI_PRESETS.find(p => p.id === aiId)
@@ -300,6 +316,7 @@ export function useAppStore() {
       panels: [...w.panels, {
         id: createPanelId(aiId),
         aiId,
+        persistentId: Date.now().toString() + Math.random().toString(36).substring(7),
         name: preset.name,
         url: preset.url,
         icon: preset.icon,
@@ -316,7 +333,8 @@ export function useAppStore() {
     if (!activeWorkspaceId) return
     updateWorkspace(activeWorkspaceId, w => ({
       ...w,
-      panels: w.panels.filter(p => p.id !== panelId)
+      panels: w.panels.filter(p => p.id !== panelId),
+      maximizedPanelId: w.maximizedPanelId === panelId ? null : w.maximizedPanelId
     }))
   }, [activeWorkspaceId, updateWorkspace])
 
@@ -399,7 +417,6 @@ export function useAppStore() {
     updateWorkspace(activeWorkspaceId, w => ({ ...w, panels: newPanels }))
   }, [activeWorkspaceId, updateWorkspace])
 
-  // Summary related methods
   const setShowSummary = useCallback((show: boolean) => {
     if (!activeWorkspaceId) return
     updateSummaryState(activeWorkspaceId, () => ({ show }))
@@ -446,15 +463,27 @@ export function useAppStore() {
   }, [activeWorkspaceId, updateSummaryState])
 
   const addSummaryPrompt = useCallback((prompt: SummaryPrompt) => {
-    setSummaryPrompts(prev => [...prev, prompt])
+    setSummaryPrompts(prev => {
+      const next = [...prev, prompt]
+      window.electronAPI?.summary.savePrompts(next)
+      return next
+    })
   }, [])
 
   const removeSummaryPrompt = useCallback((id: string) => {
-    setSummaryPrompts(prev => prev.filter(p => p.id !== id))
+    setSummaryPrompts(prev => {
+      const next = prev.filter(p => p.id !== id)
+      window.electronAPI?.summary.savePrompts(next)
+      return next
+    })
   }, [])
 
   const updateSummaryPrompt = useCallback((id: string, content: string) => {
-    setSummaryPrompts(prev => prev.map(p => p.id === id ? { ...p, content } : p))
+    setSummaryPrompts(prev => {
+      const next = prev.map(p => p.id === id ? { ...p, content } : p)
+      window.electronAPI?.summary.savePrompts(next)
+      return next
+    })
   }, [])
 
   const addUserQuery = useCallback((workspaceId: string, query: string) => {
@@ -500,7 +529,6 @@ export function useAppStore() {
     moveWorkspace,
     sidebarCollapsed,
     setSidebarCollapsed,
-    // Summary
     summaryState,
     summaryPrompts,
     setShowSummary,
@@ -514,5 +542,7 @@ export function useAppStore() {
     addSummaryPrompt,
     removeSummaryPrompt,
     updateSummaryPrompt,
+    maximizedPanelId,
+    setMaximizedPanelId,
   }
 }
