@@ -142,8 +142,8 @@ function getSendScript(aiId: string, text: string): string {
     t.focus();
     
     // 输入逻辑
-    if (id === 'yiyan' || id === 'yuanbao' || t.getAttribute('data-slate-editor') === 'true') {
-      // --- 文心一言/元宝专项 (Slate.js) ---
+    if (id === 'yiyan' || id === 'yuanbao' || id === 'doubao' || t.getAttribute('data-slate-editor') === 'true') {
+      // --- 文心一言/元宝/豆包专项 (Slate.js 或 React 驱动) ---
       var selection = window.getSelection();
       var range = document.createRange();
       range.selectNodeContents(t);
@@ -164,7 +164,7 @@ function getSendScript(aiId: string, text: string): string {
       document.execCommand('insertText', false, msg);
     }
     else {
-      // --- 豆包/智谱/DeepSeek (标准 textarea) ---
+      // --- 智谱/DeepSeek (标准 textarea) ---
       var nativeSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
       if (nativeSetter && nativeSetter.set) nativeSetter.set.call(t, msg); else t.value = msg;
     }
@@ -173,7 +173,7 @@ function getSendScript(aiId: string, text: string): string {
 
     // 延迟点击 (元宝增加到 600ms)
     setTimeout(function() {
-      var btnSelectors = ['[data-testid="chat-input-send-button"]', '[class*="send__slzHSuja"]', '[class*="btnContainer__sFTJytvZ"]', '[data-testid*="send"]', 'button[aria-label*="发送"]', '.send-button'];
+      var btnSelectors = ['[data-testid="chat_input_send_button"]', '[data-testid="chat-input-send-button"]', '[class*="send__slzHSuja"]', '[class*="btnContainer__sFTJytvZ"]', '[data-testid*="send"]', 'button[aria-label*="发送"]', '.send-button'];
       var clicked = false;
       for (var j = 0; j < btnSelectors.length; j++) {
         var btn = document.querySelector(btnSelectors[j]);
@@ -185,7 +185,7 @@ function getSendScript(aiId: string, text: string): string {
         }
       }
       
-      if (!clicked || id === 'yuanbao' || id === 'chatglm') {
+      if (!clicked || id === 'yuanbao' || id === 'chatglm' || id === 'doubao') {
         var opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true };
         t.dispatchEvent(new KeyboardEvent('keydown', opts));
         t.dispatchEvent(new KeyboardEvent('keypress', opts));
