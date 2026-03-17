@@ -16,5 +16,10 @@ This registry lists all development tracks for the AI Compare project, tracking 
 
 ---
 
-- [ ] **Track: Fix Resizing and Remove keytar**
+- [~] **Track: Fix Resizing and Remove keytar**
 *Link: [./tracks/fix-resizing-remove-keytar_20260316/](./tracks/fix-resizing-remove-keytar_20260316/)*
+
+---
+
+- [ ] **Track: Fix API 401 Authentication Error**
+*Link: [./tracks/fix-api-401_20260317/](./tracks/fix-api-401_20260317/)*

@@ -1,0 +1,8 @@
+{
+  "track_id": "fix-api-401_20260317",
+  "type": "bug",
+  "status": "new",
+  "created_at": "2026-03-17T11:00:00Z",
+  "updated_at": "2026-03-17T11:00:00Z",
+  "description": "修复 api 报错，❌ 生成失败: API 401: Authentication Fails"
+}
