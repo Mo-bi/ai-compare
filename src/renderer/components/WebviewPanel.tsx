@@ -142,8 +142,8 @@ function getSendScript(aiId: string, text: string): string {
     t.focus();
     
     // 输入逻辑
-    if (id === 'yiyan' || id === 'yuanbao' || id === 'doubao' || t.getAttribute('data-slate-editor') === 'true') {
-      // --- 文心一言/元宝/豆包专项 (Slate.js 或 React 驱动) ---
+    if (id === 'yiyan' || id === 'yuanbao' || t.getAttribute('data-slate-editor') === 'true') {
+      // --- 文心一言/元宝专项 (Slate.js 或 React 驱动) ---
       var selection = window.getSelection();
       var range = document.createRange();
       range.selectNodeContents(t);
@@ -164,7 +164,7 @@ function getSendScript(aiId: string, text: string): string {
       document.execCommand('insertText', false, msg);
     }
     else {
-      // --- 智谱/DeepSeek (标准 textarea) ---
+      // --- 豆包/智谱/DeepSeek (标准 textarea) ---
       var nativeSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
       if (nativeSetter && nativeSetter.set) nativeSetter.set.call(t, msg); else t.value = msg;
     }
