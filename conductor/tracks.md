@@ -21,5 +21,5 @@ This registry lists all development tracks for the AI Compare project, tracking 
 
 ---
 
-- [ ] **Track: Fix API 401 Authentication Error**
+- [~] **Track: Fix API 401 Authentication Error**
 *Link: [./tracks/fix-api-401_20260317/](./tracks/fix-api-401_20260317/)*

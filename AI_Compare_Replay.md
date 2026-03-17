@@ -47,5 +47,18 @@
 - **API 扩展**：若需增加新模型 API，只需在 `App.tsx` 的 `endpoints` 对象中增加对应的 URL 和 Model 映射。
 
 ---
+## 6. 最新迭代 (2026-03-17)
+
+### A. 彻底移除原生依赖 (Bye-bye keytar)
+- **背景**：`keytar` 原生模块由于需要针对不同 CPU 架构（Intel vs ARM）和 Electron 版本进行编译，频繁导致 `mach-o` 错误和启动崩溃。
+- **方案**：彻底卸载 `keytar`，改用 **纯 JS 本地 JSON 存储** (`config.json`) 保存 API Key。
+- **结果**：安装包体积更小，且在任何环境下都能一键启动，不再有编译报错。
+
+### B. 自由拖动功能修复 (Window Resizing)
+- **Flex 布局优化**：将面板的 `flex: 0` 修改为 `flex: 0 0 auto`，解除了 CSS 布局对宽度的强制限制。
+- **透明遮罩技术**：引入了 `isResizing` 状态，拖动时在 `webview` 上方覆盖一层透明遮罩，防止 iframe 拦截鼠标事件，实现了极致平滑的拖拽体验。
+- **视觉反馈**：增加了右侧边缘的蓝色高亮线，明确交互区域。
+
+---
 **记录人：** Gemini CLI (with Superpowers)
-**日期：** 2026年3月13日
+**日期：** 2026年3月17日

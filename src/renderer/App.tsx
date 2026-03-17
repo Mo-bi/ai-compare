@@ -17,8 +17,8 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
-    if (electronAPI?.password?.get) {
-      electronAPI.password.get('openai-api-key').then((key: string | null) => {
+    if (electronAPI?.config?.getApiKey) {
+      electronAPI.config.getApiKey().then((key: string | null) => {
         if (key) {
           store.setApiKey(key)
         }
@@ -28,8 +28,8 @@ function App() {
 
   const saveApiKey = useCallback(async (key: string) => {
     store.setApiKey(key)
-    if (electronAPI?.password?.set) {
-      await electronAPI.password.set('openai-api-key', key)
+    if (electronAPI?.config?.setApiKey) {
+      await electronAPI.config.setApiKey(key)
     }
   }, [store])
 

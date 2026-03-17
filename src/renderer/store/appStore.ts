@@ -279,7 +279,7 @@ export function useAppStore() {
   const [inputText, setInputText] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('openai_api_key') || '')
+  const [apiKey, setApiKey] = useState('')
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId)
   const panels = activeWorkspace?.panels || []
@@ -514,7 +514,6 @@ export function useAppStore() {
     clearUserQueries,
     saveApiKey: useCallback((key: string) => {
       setApiKey(key)
-      localStorage.setItem('openai_api_key', key)
     }, []),
     addPanel,
     removePanel,

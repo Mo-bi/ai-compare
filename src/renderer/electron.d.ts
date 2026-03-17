@@ -24,14 +24,13 @@ interface Window {
     maximize: () => void
     close: () => void
     getAppPath: () => Promise<string>
+    config: {
+      getApiKey: () => Promise<string | null>
+      setApiKey: (key: string) => Promise<boolean>
+    }
     openExternal: (url: string) => Promise<void>
     platform: string
     invoke: (channel: string, ...args: unknown[]) => Promise<any>
-    password: {
-      get: (account: string) => Promise<string | null>
-      set: (account: string, password: string) => Promise<void>
-      delete: (account: string) => Promise<boolean>
-    }
     summary: {
       collectHistories: () => Promise<any>
       generateText: (histories: any) => Promise<string>

@@ -23,8 +23,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const [showKey, setShowKey] = useState(false)
 
   const handleSave = () => {
-    onSaveApiKey(localApiKey)
+    const trimmedKey = localApiKey.trim()
+    onSaveApiKey(trimmedKey)
     onSaveSummaryModel(localModel)
+    setLocalApiKey(trimmedKey)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }

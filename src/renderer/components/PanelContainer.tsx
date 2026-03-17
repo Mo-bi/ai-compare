@@ -162,9 +162,10 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
                     width: isMaximized ? '100%' : `${panel.width}px`,
                     height: '100%',
                     flexShrink: 0,
-                    flex: isMaximized ? 1 : (maximizedPanelId ? 0 : 1), 
+                    flex: isMaximized ? '1 1 auto' : '0 0 auto', 
                     display: isHiddenInWorkspace ? 'none' : 'flex',
                     minWidth: isMaximized ? '100%' : '320px',
+                    position: 'relative',
                   }}
                 >
                   <WebviewPanel
@@ -179,6 +180,22 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
                     onResizeStart={handleResizeStart}
                     isLast={index === panels.length - 1 || !!maximizedPanelId}
                   />
+
+                  {/* 调整大小时显示透明遮罩层，防止 Webview 拦截鼠标事件 */}
+                  {isResizing && (
+                    <div 
+                      style={{ 
+                        position: 'absolute', 
+                        top: 0, 
+                        left: 0, 
+                        right: 0, 
+                        bottom: 0, 
+                        zIndex: 100, 
+                        background: 'transparent',
+                        cursor: 'col-resize'
+                      }} 
+                    />
+                  )}
                 </div>
               )
             })}

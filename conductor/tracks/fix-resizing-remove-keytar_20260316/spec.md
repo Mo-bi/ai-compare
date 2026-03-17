@@ -1,12 +1,13 @@
-# Specification: Fix Resizing and Remove keytar
+# Specification: Fix Resizing (Critical Bug) and Remove keytar
 
 ## Overview
-This track addresses two primary issues: the non-functional window resizing mechanism and the build/runtime instability caused by the `keytar` native dependency.
+This track addresses two primary issues: the non-functional window resizing mechanism (a critical UX bug) and the build/runtime instability caused by the `keytar` native dependency.
 
 ## Functional Requirements
-1. **Window Resizing Fix**:
-    - Ensure that when the cursor is at the panel boundary (showing the `col-resize` state), the user can drag to change the width of the windows.
-    - Fix the underlying event handling or layout constraints preventing the width update.
+1. **Critical Bug: Free Window Resizing Fix**:
+    - **Smooth Dragging**: Ensure that when the cursor is at the panel boundary, the user can freely and smoothly drag to resize window widths.
+    - **Event Capture**: Fix the issue where mouse events are lost or blocked, preventing the width from updating.
+    - **Visual Feedback**: Maintain the `col-resize` cursor and ensure it accurately reflects the interactive area.
 2. **Remove keytar Dependency**:
     - Completely remove the `keytar` library from `package.json` and the codebase.
     - Remove the `passwordManager.ts` utility and any related IPC handlers.

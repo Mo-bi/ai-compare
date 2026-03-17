@@ -119,7 +119,47 @@ const WebviewPanel = React.forwardRef<WebviewRef, WebviewPanelProps>(({
           webpreferences="contextIsolation=yes, spellcheck=yes" // 确保上下文隔离，模拟标准浏览器环境
         />
       </div>
-      <div className="resize-handle" onMouseDown={(e) => { e.preventDefault(); onResizeStart(panel.id, e.clientX); }} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '6px', cursor: 'col-resize', background: 'transparent', zIndex: 10 }} />
+      {!isMaximized && (
+        <div
+          className="resize-handle"
+          onMouseDown={(e) => {
+            e.preventDefault()
+            onResizeStart(panel.id, e.clientX)
+          }}
+          style={{ 
+            position: 'absolute', 
+            right: 0, 
+            top: 0, 
+            bottom: 0, 
+            width: '8px', 
+            cursor: 'col-resize', 
+            background: 'transparent', 
+            zIndex: 100,
+            display: 'flex',
+            justifyContent: 'center',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            const line = e.currentTarget.querySelector('.resize-line') as HTMLElement
+            if (line) line.style.opacity = '1'
+          }}
+          onMouseLeave={(e) => {
+            const line = e.currentTarget.querySelector('.resize-line') as HTMLElement
+            if (line) line.style.opacity = '0'
+          }}
+        >
+          <div 
+            className="resize-line"
+            style={{
+              width: '2px',
+              height: '100%',
+              background: 'var(--accent-blue)',
+              opacity: 0,
+              transition: 'opacity 0.2s'
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 })

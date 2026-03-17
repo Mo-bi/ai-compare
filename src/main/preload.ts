@@ -10,6 +10,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 获取应用路径
   getAppPath: () => ipcRenderer.invoke('get-app-path'),
   
+  // 基础配置
+  config: {
+    getApiKey: () => ipcRenderer.invoke('config:get-api-key'),
+    setApiKey: (key: string) => ipcRenderer.invoke('config:set-api-key', key),
+  },
+  
   // 打开外部链接
   openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
   
@@ -18,13 +24,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 通用 IPC 调用方法
   invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
-  
-  // 密码管理
-  password: {
-    get: (account: string) => ipcRenderer.invoke('password:get', account),
-    set: (account: string, password: string) => ipcRenderer.invoke('password:set', account, password),
-    delete: (account: string) => ipcRenderer.invoke('password:delete', account),
-  },
   
   // 综述服务
   summary: {

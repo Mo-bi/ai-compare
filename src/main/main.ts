@@ -1,7 +1,6 @@
 import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { createPasswordManager } from './passwordManager'
 import { setupSummaryService } from './summaryService'
 
 // 禁用沙盒以解决 macOS 沙盒权限问题
@@ -129,20 +128,6 @@ app.whenReady().then(() => {
   // 确保应用数据目录存在
   ensureAppDataDirectory()
   
-  // 初始化密码管理器
-  const passwordManager = createPasswordManager()
-  
-  // 设置 IPC 处理：密码管理
-  ipcMain.handle('password:get', async (_event, account: string) => {
-    return await passwordManager.getPassword(account)
-  })
-  ipcMain.handle('password:set', async (_event, account: string, password: string) => {
-    await passwordManager.setPassword(account, password)
-  })
-  ipcMain.handle('password:delete', async (_event, account: string) => {
-    return await passwordManager.deletePassword(account)
-  })
-
   // --- 【新增】Prompt 模板持久化存储 ---
   const PROMPTS_FILE = path.join(app.getPath('userData'), 'summary_prompts.json')
   
@@ -168,11 +153,52 @@ app.whenReady().then(() => {
     }
   })
 
+  // --- 【新增】API Key 持久化存储 (取代 keytar) ---
+  const CONFIG_FILE = path.join(app.getPath('userData'), 'config.json')
+
+  ipcMain.handle('config:get-api-key', async () => {
+    try {
+      if (fs.existsSync(CONFIG_FILE)) {
+        const data = fs.readFileSync(CONFIG_FILE, 'utf-8')
+        const config = JSON.parse(data)
+        return config.openaiApiKey || null
+      }
+    } catch (e) {
+      console.error('[Main] Failed to load config:', e)
+    }
+    return null
+  })
+
+  ipcMain.handle('config:set-api-key', async (_event, key: string) => {
+    try {
+      let config = {}
+      if (fs.existsSync(CONFIG_FILE)) {
+        const data = fs.readFileSync(CONFIG_FILE, 'utf-8')
+        config = JSON.parse(data)
+      }
+      config = { ...config, openaiApiKey: key }
+      fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2))
+      return true
+    } catch (e) {
+      console.error('[Main] Failed to save config:', e)
+      return false
+    }
+  })
+
   // --- 【新增】流式 API 请求代理 ---
   ipcMain.on('api:proxy-stream', async (event, { url, method, headers, body }) => {
     const webContents = event.sender
     try {
+      const authHeader = headers['Authorization'] || ''
+      const keyMatch = authHeader.match(/Bearer\s+(.+)/)
+      const rawKey = keyMatch ? keyMatch[1] : ''
+      const maskedKey = rawKey.length > 8 
+        ? `${rawKey.slice(0, 4)}****${rawKey.slice(-4)}`
+        : '****'
+      
       console.log('[Main] Starting proxy stream for:', url)
+      console.log('[Main] Using API Key:', maskedKey)
+
       const response = await fetch(url, {
         method,
         headers: {
