@@ -1,6 +1,6 @@
 {
   "name": "ai-compare",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "Multi-model AI chat comparison tool - chat with all AI bots simultaneously without API costs",
   "main": "dist/main/main.js",
   "scripts": {
