@@ -13,3 +13,8 @@ This registry lists all development tracks for the AI Compare project, tracking 
 
 ## Archive
 - (None currently archived)
+
+---
+
+- [ ] **Track: Fix Resizing and Remove keytar**
+*Link: [./tracks/fix-resizing-remove-keytar_20260316/](./tracks/fix-resizing-remove-keytar_20260316/)*
