@@ -73,6 +73,7 @@ const WebviewPanel = React.forwardRef<WebviewRef, WebviewPanelProps>(({
     if (!wv) return
     const handleLoadStart = () => { setIsLoading(true); onLoadingChange(panel.id, true); }
     const handleLoadStop = () => { setIsLoading(false); onLoadingChange(panel.id, false); }
+
     wv.addEventListener('did-start-loading', handleLoadStart)
     wv.addEventListener('did-stop-loading', handleLoadStop)
     return () => {
@@ -116,7 +117,7 @@ const WebviewPanel = React.forwardRef<WebviewRef, WebviewPanelProps>(({
           style={{ width: '100%', height: '100%', display: 'flex' }}
           allowpopups="true"
           partition={`persist:${panel.aiId}`}
-          webpreferences="contextIsolation=yes, spellcheck=yes" // 确保上下文隔离，模拟标准浏览器环境
+          webpreferences="spellcheck=yes"
         />
       </div>
       {!isMaximized && (

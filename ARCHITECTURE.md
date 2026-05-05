@@ -59,7 +59,31 @@
 - **智能排重**：基于文本内容和坐标位置(`getBoundingClientRect`)，即使长文本被截断或存在嵌套，也能通过相似度和位置关系完美去重。
 - **侧边栏与死区屏蔽**：基于坐标系统，自动过滤过短碎词和左侧导航栏等非对话区域。
 
-### 5. 高级汇总综述系统
+### 5. 内置浏览器功能（链接打开）
+
+#### A. 链接拦截与处理
+- 在 `main.ts` 中监听 `web-contents-created` 事件
+- 对每个 webview 调用 `setWindowOpenHandler` 拦截链接打开
+- 不允许在 webview 中直接打开新窗口，而是创建独立的浏览器窗口
+- 通过 `query` 参数传递初始 URL 给浏览器界面
+
+#### B. 自定义浏览器窗口
+- 独立的 BrowserWindow，包含完整的地址栏和导航按钮
+- 使用 `<webview>` 标签加载网站内容，提供原生浏览器体验
+- 地址栏支持输入新网址，自动添加 `https://` 前缀
+- 前进/后退/刷新按钮，操作更便捷
+- 完整支持浏览器右键菜单，支持复制、粘贴等常用功能
+- 在浏览器中点击链接会打开新的浏览器窗口，形成完整的浏览体验
+
+#### C. 关键实现细节
+- browser.html：自定义浏览器界面
+  - 工具栏（导航按钮、地址栏）
+  - webview 内容区域
+  - JavaScript 脚本处理导航和 URL 更新
+- Webview 配置：`nodeIntegration: true`, `contextIsolation: false`, `webviewTag: true`
+- 通过 `new-window` 事件在浏览器中再次拦截新窗口链接
+
+### 6. 高级汇总综述系统
 
 #### A. 精准提问记录
 - 系统在 `handleSend` 阶段自动将用户输入的文字存入当前 Workspace 的 `userQueries` 状态。
@@ -80,7 +104,7 @@
   - **实时同步**：用户在设置或综述面板的任何修改都会实时持久化到磁盘。
   - **重装不丢**：独立于浏览器缓存，支持跨版本升级和应用卸载重装后的数据自动恢复。
 
-### 6. 安全与隐私
+### 7. 安全与隐私
 
 1. **本地存储**：API Key 与对话历史仅保存在本地磁盘（`userData` 目录），不经过任何第三方服务器。
 2. **登录状态**：每个网站独立 partition，Cookie 物理隔离。
@@ -92,14 +116,15 @@
 ai-compare/
 ├── src/
 │   ├── main/                    # Electron 主进程
-│   │   ├── main.ts              # 主进程入口（窗口创建、响应头拦截）
+│   │   ├── main.ts              # 主进程入口（窗口创建、链接拦截、浏览器功能）
 │   │   ├── preload.ts           # 预加载脚本（安全 API 暴露）
 │   │   ├── passwordManager.ts   # macOS 钥匙串管理
 │   │   └── summaryService.ts    # 综述服务（收集历史、调用 API）
 │   └── renderer/                # React 渲染进程
+│       ├── browser.html         # 内置浏览器界面（地址栏、导航按钮）
 │       ├── App.tsx              # 主应用组件
 │       ├── components/
-│       │   ├── WebviewPanel.tsx  # 单个 webview 面板（含 JS 注入逻辑）
+│       │   ├── WebviewPanel.tsx  # 单个 webview 面板（含链接拦截）
 │       │   ├── PanelContainer.tsx # 多面板横向布局容器
 │       │   ├── GlobalInput.tsx   # 底部统一输入框（自动收起/展开）
 │       │   ├── SummaryPanel.tsx  # 综述侧边栏
