@@ -1,7 +1,48 @@
-import { app, BrowserWindow, ipcMain, session, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, session, shell, Menu, clipboard } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { setupSummaryService } from './summaryService'
+
+// 保存浏览器窗口的引用
+let browserWindows: BrowserWindow[] = []
+
+// 创建带地址栏的浏览器窗口
+function createBrowserWindow(url: string) {
+  const win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
+    show: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      webviewTag: true
+    },
+    icon: path.join(__dirname, '../assets/icon.png'),
+    titleBarStyle: 'default'
+  })
+
+  // 加载自定义浏览器界面，通过 query string 传递 URL
+  win.loadFile(path.join(__dirname, '../renderer/browser.html'), {
+    query: { url }
+  })
+  
+  win.once('ready-to-show', () => {
+    win.show()
+  })
+
+  win.on('closed', () => {
+    // 从数组中移除引用
+    const index = browserWindows.indexOf(win)
+    if (index > -1) {
+      browserWindows.splice(index, 1)
+    }
+  })
+
+  browserWindows.push(win)
+  return win
+}
 
 // 禁用沙盒以解决 macOS 沙盒权限问题
 app.commandLine.appendSwitch('no-sandbox')
@@ -31,10 +72,6 @@ function ensureAppDataDirectory() {
     if (!fs.existsSync(partitionsPath)) {
       fs.mkdirSync(partitionsPath, { recursive: true })
     }
-    
-    // 确保目录权限正确
-    fs.chmodSync(userDataPath, 0o755)
-    fs.chmodSync(partitionsPath, 0o755)
     
     console.log('[Main] App data directory ensured:', userDataPath)
   } catch (error) {
@@ -237,11 +274,11 @@ app.whenReady().then(() => {
       webContents.send('api:proxy-error', e.message)
     }
   })
-  
-  // 初始化综述服务
-  setupSummaryService()
-  
-  createWindow()
+
+  // 处理从浏览器窗口中打开新窗口
+  ipcMain.on('open-new-window', (event, url) => {
+    createBrowserWindow(url)
+  })
 
   // --- 【新增】全局 User-Agent 支持 ---
   const CHROME_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
@@ -251,7 +288,29 @@ app.whenReady().then(() => {
     if (contents.getType() === 'webview') {
       // 1. 强制设置现代浏览器 User-Agent，绕过网站的“非标浏览器”拦截
       (contents as any).setUserAgent(CHROME_UA);
+      
+      // 2. 为每个 webview 也设置响应头拦截
+      contents.session.webRequest.onHeadersReceived(
+        { urls: ['*://*/*'] },
+        (details, callback) => {
+          const headers = details.responseHeaders || {}
+          delete headers['X-Frame-Options']
+          delete headers['x-frame-options']
+          callback({ cancel: false, responseHeaders: headers })
+        }
+      )
+      
+      // 3. 拦截新窗口打开，使用我们的自定义浏览器
+      contents.setWindowOpenHandler(({ url }) => {
+        createBrowserWindow(url)
+        return { action: 'deny' }
+      })
     }
+    
+    // 4. 允许所有导航
+    contents.on('will-navigate', (_event, _url) => {
+      // 允许所有导航
+    })
   })
 
   app.on('activate', () => {
@@ -264,25 +323,5 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
-  }
-})
-
-// 允许 webview 加载任何 URL（包括 http）
-app.on('web-contents-created', (_event, contents) => {
-  contents.on('will-navigate', (_event, _url) => {
-    // 允许所有导航
-  })
-  
-  // 为每个 webview 也设置响应头拦截
-  if (contents.getType() === 'webview') {
-    contents.session.webRequest.onHeadersReceived(
-      { urls: ['*://*/*'] },
-      (details, callback) => {
-        const headers = details.responseHeaders || {}
-        delete headers['X-Frame-Options']
-        delete headers['x-frame-options']
-        callback({ cancel: false, responseHeaders: headers })
-      }
-    )
   }
 })
