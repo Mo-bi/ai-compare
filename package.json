@@ -1,6 +1,6 @@
 {
   "name": "ai-compare",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Multi-model AI chat comparison tool - chat with all AI bots simultaneously without API costs",
   "main": "dist/main/main.js",
   "scripts": {
@@ -26,7 +26,7 @@
     "comparison",
     "multi-model"
   ],
-  "author": "AI Compare",
+  "author": "Neo <geekmao10000@gmail.com>",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -117,7 +117,8 @@
         }
       ],
       "icon": "assets/icon.png",
-      "category": "Network"
+      "category": "Network",
+      "maintainer": "Neo <geekmao10000@gmail.com>"
     }
   }
 }
