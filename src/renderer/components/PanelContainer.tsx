@@ -162,7 +162,7 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
                     width: isMaximized ? '100%' : `${panel.width}px`,
                     height: '100%',
                     flexShrink: 0,
-                    flex: isMaximized ? '1 1 auto' : '0 0 auto', 
+                    flexGrow: isMaximized ? 1 : 0, 
                     display: isHiddenInWorkspace ? 'none' : 'flex',
                     minWidth: isMaximized ? '100%' : '320px',
                     position: 'relative',
