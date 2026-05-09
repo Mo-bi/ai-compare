@@ -143,7 +143,7 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
               flexDirection: 'row',
               width: '100%',
               height: '100%',
-              overflowX: 'auto',
+              overflowX: (maximizedPanelId && isActive) ? 'hidden' : 'auto',
               overflowY: 'hidden',
               position: 'absolute', // 重叠定位，通过 display 切换
               left: 0,
@@ -162,7 +162,7 @@ const PanelContainer: React.FC<PanelContainerProps> = ({
                     width: isMaximized ? '100%' : `${panel.width}px`,
                     height: '100%',
                     flexShrink: 0,
-                    flexGrow: isMaximized ? 1 : 0, 
+                    flex: isMaximized ? '1 1 auto' : '0 0 auto', 
                     display: isHiddenInWorkspace ? 'none' : 'flex',
                     minWidth: isMaximized ? '100%' : '320px',
                     position: 'relative',
